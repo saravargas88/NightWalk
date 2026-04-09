@@ -22,10 +22,10 @@ model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 #loop through 50 images and get the proxy counts 
 data_dir     = "urban-mosaic/washington-square"
 csv_path = "urban-mosaic/washington-square.csv"
-outut_csv  = "proxy_counts.csv"
+output_csv = "proxy_counts.csv"
 samples = 50
 
-text_labels = [["a tree . a storefront . a lamppost"]]
+text_labels = "a tree . a storefront . a lamppost"
 
 output_rows = []
 processed = 0
