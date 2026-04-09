@@ -6,8 +6,6 @@ For now trees storefronts and lampposts
 
 
 '''
-
-
 import csv
 
 import torch
@@ -20,30 +18,32 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-BASE     = "urban-mosaic/washington-square"
-CSV_PATH = "urban-mosaic/washington-square.csv"
-OUT_CSV  = "proxy_counts.csv"
-LIMIT    = 50
+
+#loop through 50 images and get the proxy counts 
+data_dir     = "urban-mosaic/washington-square"
+csv_path = "urban-mosaic/washington-square.csv"
+outut_csv  = "proxy_counts.csv"
+samples = 50
 
 text_labels = [["a tree . a storefront . a lamppost"]]
 
 output_rows = []
 processed = 0
 
-for row in csv.DictReader(open(CSV_PATH)):
+for row in csv.DictReader(open(csv_path)):
+    #skip evening img
     if row["period"] == "evening":
         continue
-    if processed >= LIMIT:
-        break
 
-    img_path = BASE + "/" + row["image"]
+    img_path = data_dir + "/" + row["image"]
     try:
         image = Image.open(img_path).convert("RGB")
     except Exception as e:
         print(f"Skipping {img_path}: {e}")
         continue
 
-    inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+    inputs = processor(images=image, text=text_labels, return_tensors="pt").to(model.device)
+    
     with torch.no_grad():
         outputs = model(**inputs)
 
@@ -55,12 +55,15 @@ for row in csv.DictReader(open(CSV_PATH)):
         target_sizes=[image.size[::-1]]
     )[0]
 
+    #so the model will return a list of detected objects w labels
+    # we cound how many times a label appears and increment count 
     counts = {"tree": 0, "storefront": 0, "lamppost": 0}
     for label in detections["labels"]:
         for key in counts:
             if key in label.lower():
                 counts[key] += 1
 
+    #data of image in csv  
     output_rows.append({
         "image": row["image"],
         "taken_on": row["taken_on"],
@@ -71,11 +74,14 @@ for row in csv.DictReader(open(CSV_PATH)):
     })
 
     processed += 1
-    print(f"[{processed}/{LIMIT}] {row['image']}  trees={counts['tree']} storefronts={counts['storefront']} lampposts={counts['lamppost']}")
+    print(f"[{processed}/{samples}] {row['image']}  trees={counts['tree']} storefronts={counts['storefront']} lampposts={counts['lamppost']}")
+    
+    if processed >= samples:
+        break
 
-with open(OUT_CSV, "w", newline="") as f:
+with open(output_csv, "w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=["image", "taken_on", "period", "trees", "storefronts", "lampposts"])
     writer.writeheader()
     writer.writerows(output_rows)
 
-print(f"\nSaved {len(output_rows)} rows to {OUT_CSV}")
+print(f"\nSaved {len(output_rows)} rows to {output_csv}")
