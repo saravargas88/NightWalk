@@ -34,6 +34,3 @@ Feasibility test for first run of the application.
  
 
 '''
-
-
-
