@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DINO Proxy Viewer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; font-size: 14px; background: #111; color: #eee; padding: 2rem; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 1.5rem; }
+  #drop { border: 1.5px dashed #444; border-radius: 12px; padding: 2rem; text-align: center; color: #888; cursor: pointer; transition: background 0.15s; background: #1e1e1e; margin-bottom: 1.5rem; }
+  #drop:hover { background: #2a2a2a; }
+  #drop input { display: none; }
+  #main { display: none; }
+  .run-toggle { display: flex; background: #2a2a2a; border-radius: 6px; overflow: hidden; border: 1px solid #444; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .run-toggle button { background: none; border: none; color: #aaa; padding: 7px 14px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .run-toggle button.active { background: #555; color: #fff; }
+  .summary { display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .stat { background: #1e1e1e; border-radius: 8px; padding: 0.75rem 1rem; min-width: 100px; }
+  .stat .lbl { font-size: 11px; color: #888; margin-bottom: 4px; }
+  .stat .val { font-size: 20px; font-weight: 500; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; }
+  .toolbar select { padding: 6px 10px; border: 1px solid #444; border-radius: 6px; font-size: 13px; background: #2a2a2a; color: #eee; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .card { background: #1e1e1e; border-radius: 10px; border: 1px solid #333; overflow: hidden; }
+  .labels { display: flex; gap: 5px; padding: 7px 8px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+  .card img { width: 100%; height: 150px; object-fit: cover; display: block; cursor: zoom-in; }
+  #empty { color: #666; text-align: center; padding: 2rem; font-size: 13px; }
+  .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:99; align-items:center; justify-content:center; cursor:zoom-out; }
+  .lightbox.open { display:flex; }
+  .lightbox img { max-width:90vw; max-height:90vh; object-fit:contain; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<h1>DINO proxy viewer</h1>
+
+<div id="drop" onclick="document.getElementById('fi').click()">
+  <input type="file" id="fi" accept=".csv" multiple>
+  <div style="font-size: 15px; font-weight: 500; margin-bottom: 6px;">Drop dino_counts_*.csv files here</div>
+  <div style="font-size: 13px;">or click to browse — load multiple runs at once</div>
+</div>
+
+<div id="main">
+  <div class="run-toggle" id="run-toggle"></div>
+  <div class="summary" id="summary"></div>
+  <div class="toolbar">
+    <select id="sort" onchange="render()">
+      <option value="">Sort: default</option>
+    </select>
+  </div>
+  <div id="grid"></div>
+  <div id="empty" style="display:none">No rows.</div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lightbox-img" src="">
+</div>
+
+<script>
+const IMG_BASE = "../urban-mosaic/washington-square/";
+
+const PALETTE = [
+  { bg: "#EAF3DE", color: "#3B6D11" },
+  { bg: "#FAEEDA", color: "#854F0B" },
+  { bg: "#E6F1FB", color: "#185FA5" },
+  { bg: "#EEEDFE", color: "#3C3489" },
+  { bg: "#FAECE7", color: "#993C1D" },
+  { bg: "#E1F5EE", color: "#0F6E56" },
+];
+
+const SKIP = new Set(["image", "taken_on", "period", "run"]);
+
+let runs      = {};
+let current   = null;
+let colColors = {};
+let colIndex  = 0;
+
+function colorFor(col) {
+  if (!colColors[col]) {
+    colColors[col] = PALETTE[colIndex % PALETTE.length];
+    colIndex++;
+  }
+  return colColors[col];
+}
+
+function parseCSV(text) {
+  const lines   = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',');
+    const obj  = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function loadFiles(files) {
+  let pending = files.length;
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const rows = parseCSV(ev.target.result);
+      const name = file.name.replace('.csv', '');
+      runs[name] = rows;
+      pending--;
+      if (pending === 0) init();
+    };
+    reader.readAsText(file);
+  });
+}
+
+function init() {
+  const names = Object.keys(runs).sort();
+  if (!current || !runs[current]) current = names[0];
+
+  const wrap = document.getElementById('run-toggle');
+  wrap.innerHTML = '';
+  names.forEach(name => {
+    const btn = document.createElement('button');
+    btn.textContent = name;
+    btn.className = name === current ? 'active' : '';
+    btn.onclick = () => { current = name; setActive(btn); updateSort(); render(); };
+    wrap.appendChild(btn);
+  });
+
+  document.getElementById('drop').style.display = 'none';
+  document.getElementById('main').style.display  = 'block';
+  updateSort();
+  render();
+}
+
+function setActive(el) {
+  document.querySelectorAll('.run-toggle button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function dataCols() {
+  const rows = runs[current] || [];
+  if (!rows.length) return [];
+  return Object.keys(rows[0]).filter(k => !SKIP.has(k));
+}
+
+function updateSort() {
+  const sel  = document.getElementById('sort');
+  const cols = dataCols();
+  sel.innerHTML = '<option value="">Sort: default</option>' +
+    cols.flatMap(c => [
+      `<option value="${c}_d">${c} ↓</option>`,
+      `<option value="${c}_a">${c} ↑</option>`,
+    ]).join('');
+}
+
+function render() {
+  const rows = runs[current] || [];
+  const sort = document.getElementById('sort').value;
+  const cols = dataCols();
+
+  let filtered = [...rows];
+  if (sort) {
+    const [col, dir] = sort.split('_');
+    filtered.sort((a, b) => dir === 'd' ? (+b[col] - +a[col]) : (+a[col] - +b[col]));
+  }
+
+  const summaryEl = document.getElementById('summary');
+  summaryEl.innerHTML =
+    `<div class="stat"><div class="lbl">images</div><div class="val">${rows.length}</div></div>` +
+    cols.map(c => {
+      const total = rows.reduce((a, r) => a + (+r[c] || 0), 0);
+      return `<div class="stat"><div class="lbl">${c}</div><div class="val">${total}</div></div>`;
+    }).join('');
+
+  const grid  = document.getElementById('grid');
+  const empty = document.getElementById('empty');
+  if (!filtered.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  grid.innerHTML = filtered.map(r => {
+    const badges = cols.map(c => {
+      const { bg, color } = colorFor(c);
+      return `<span class="badge" style="background:${bg};color:${color}">${c} ${r[c] || 0}</span>`;
+    }).join('');
+    return `
+      <div class="card">
+        <div class="labels">${badges}</div>
+        <img src="${IMG_BASE}${r.image}" loading="lazy"
+          onerror="this.style.background='#333';this.style.height='150px'"
+          onclick="document.getElementById('lightbox-img').src=this.src;document.getElementById('lightbox').classList.add('open')">
+      </div>`;
+  }).join('');
+}
+
+document.getElementById('fi').addEventListener('change', e => {
+  if (e.target.files.length) loadFiles(e.target.files);
+});
+
+const dropEl = document.getElementById('drop');
+dropEl.addEventListener('dragover',  e => { e.preventDefault(); dropEl.style.background = '#2a2a2a'; });
+dropEl.addEventListener('dragleave', () => { dropEl.style.background = '#1e1e1e'; });
+dropEl.addEventListener('drop', e => {
+  e.preventDefault(); dropEl.style.background = '#1e1e1e';
+  if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+});
+</script>
+</body>
+</html>

@@ -1,4 +1,7 @@
 /urban-mosaic
 /evening_images
+*.jpg
+*.png
+*.csv
 
 .claude

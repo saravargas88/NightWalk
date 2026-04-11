@@ -1,0 +1,29 @@
+prompts:
+  - name: original
+    text: "a tree . a storefront . a lamppost . a streetlight"
+    patterns:
+      tree: '\btree\b'
+      storefront: '\bstorefront\b'
+      lamppost: '\b(lamppost|streetlight|street light)\b'
+
+  - name: rephrased
+    text: "a street tree . a shop front . a street lamp . a streetlight . a lit doorway"
+    patterns:
+      tree: '\b(tree|street tree)\b'
+      storefront: '\b(storefront|shop front|shopfront|shop sign|awning|lit doorway)\b'
+      lamppost: '\b(lamppost|streetlight|street light|street lamp)\b'
+
+  - name: specific
+    text: "a tree canopy . an illuminated storefront . a metal lamp post . a glowing streetlight . a building with doorman . an illuminated sign"
+    patterns:
+      tree: '\b(tree|canopy)\b'
+      storefront: '\b(storefront|illuminated storefront|illuminated sign|doorman)\b'
+      lamppost: '\b(lamppost|lamp post|streetlight|glowing streetlight)\b'
+
+  - name: informed_prompt_1
+    text: "a street tree . a row of trees . a tree canopy . a streetlight . a street lamp . a shop front . a lit storefront . a building with a doorman . a lit building lobby"
+    patterns:
+      tree: '\b(tree|street tree|row of trees|tree canopy|canopy)\b'
+      streetlight: '\b(streetlight|street light|street lamp|lamppost)\b'
+      storefront: '\b(storefront|shop front|shopfront|lit storefront)\b'
+      doorman: '\b(doorman|lobby|building lobby|lit lobby|building entrance)\b'
