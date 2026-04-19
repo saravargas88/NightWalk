@@ -43,7 +43,7 @@ THRESHOLDS = [
 ]
 
 # Count mode settings
-COUNT_PROMPT_NAME = "informed_prompt_1"  # must match a name in prompts.yaml
+COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
 SAMPLES           = 20
 THRESHOLD         = 0.30
 TEXT_THRESHOLD    = 0.25
