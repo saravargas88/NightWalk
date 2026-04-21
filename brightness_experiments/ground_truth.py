@@ -47,7 +47,7 @@ results = []
 for img_path in sorted(OUT_DIR.glob("*.jpg")):
     img = Image.open(img_path)
     results.append({
-        "name":      img_path.name,
+        "image":     str(OUT_DIR / img_path.name),  # e.g. "evening/filename.jpg"
         "grey":      round(greyscale_brightness(img), 1),
         "hsv":       round(hsv_brightness(img), 1),
         "cropped":   round(cropped_brightness(img), 1),
@@ -64,119 +64,16 @@ for key in ["grey", "hsv", "cropped", "luminance", "dark"]:
 
 print("\nDarkest 5 (greyscale):")
 for r in results[:5]:
-    print(f"  grey={r['grey']:5.1f}  hsv={r['hsv']:5.1f}  lum={r['luminance']:5.1f}  crop={r['cropped']:5.1f}  dark={r['dark']:5.1f}  {r['name']}")
+    print(f"  grey={r['grey']:5.1f}  hsv={r['hsv']:5.1f}  lum={r['luminance']:5.1f}  crop={r['cropped']:5.1f}  dark={r['dark']:5.1f}  {r['image']}")
 
 print("\nBrightest 5 (greyscale):")
 for r in results[-5:]:
-    print(f"  grey={r['grey']:5.1f}  hsv={r['hsv']:5.1f}  lum={r['luminance']:5.1f}  crop={r['cropped']:5.1f}  dark={r['dark']:5.1f}  {r['name']}")
+    print(f"  grey={r['grey']:5.1f}  hsv={r['hsv']:5.1f}  lum={r['luminance']:5.1f}  crop={r['cropped']:5.1f}  dark={r['dark']:5.1f}  {r['image']}")
 
 # ── Step 2: Save CSV ──────────────────────────────────────────────────────────
 with open("evening_brightness.csv", "w", newline="") as f:
-    w = csv.DictWriter(f, fieldnames=["name", "grey", "hsv", "cropped", "luminance", "dark"])
+    w = csv.DictWriter(f, fieldnames=["image", "grey", "hsv", "cropped", "luminance", "dark"])
     w.writeheader()
     w.writerows(results)
 
 print("\nSaved brightness scores to evening_brightness.csv")
-
-# ── Step 3: Generate HTML viewer ──────────────────────────────────────────────
-import json
-rows_json = json.dumps(results)
-
-html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Evening image brightness</title>
-<style>
-  body {{ font-family: sans-serif; background: #111; color: #eee; padding: 16px; }}
-  h2 {{ margin-bottom: 4px; }}
-  p  {{ margin-top: 0; color: #aaa; font-size: 13px; margin-bottom: 12px; }}
-  .controls {{ display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }}
-  .toggle {{ display: flex; background: #2a2a2a; border-radius: 6px; overflow: hidden; border: 1px solid #444; }}
-  .toggle button {{ background: none; border: none; color: #aaa; padding: 7px 14px; cursor: pointer; font-size: 12px; transition: background 0.15s; white-space: nowrap; }}
-  .toggle button.active {{ background: #555; color: #fff; }}
-  .threshold-wrap {{ display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aaa; }}
-  .threshold-wrap input {{ width: 140px; accent-color: #888; }}
-  #thresh-val {{ color: #fff; font-weight: bold; min-width: 36px; }}
-  .grid {{ display: flex; flex-wrap: wrap; gap: 10px; }}
-  .card {{ width: 200px; background: #222; border-radius: 6px; overflow: hidden; }}
-  .card img {{ width: 100%; display: block; }}
-  .card.dimmed {{ opacity: 0.2; }}
-  .scores {{ padding: 6px 8px; font-size: 11px; display: flex; flex-direction: column; gap: 2px; }}
-  .score-row {{ display: flex; justify-content: space-between; color: #666; }}
-  .score-row.active {{ color: #fff; font-weight: bold; }}
-  .score-row.active span.label {{ color: #7ec8e3; }}
-</style>
-</head>
-<body>
-<h2>Evening images — brightness viewer</h2>
-<p>Toggle which metric to sort by. Images above the threshold are dimmed. All five scores shown per image.</p>
-
-<div class="controls">
-  <div class="toggle">
-    <button id="btn-grey"      class="active" onclick="setSort('grey')">Greyscale</button>
-    <button id="btn-hsv"                      onclick="setSort('hsv')">HSV</button>
-    <button id="btn-cropped"                  onclick="setSort('cropped')">Cropped</button>
-    <button id="btn-luminance"                onclick="setSort('luminance')">Luminance</button>
-    <button id="btn-dark"                     onclick="setSort('dark')">Dark ratio</button>
-  </div>
-  <div class="threshold-wrap">
-    Nighttime cutoff:
-    <input type="range" min="0" max="255" value="80" step="1" id="thresh-slider" oninput="updateThreshold()">
-    <span id="thresh-val">80</span>
-  </div>
-</div>
-
-<div class="grid" id="grid"></div>
-
-<script>
-const data = {rows_json};
-const METRICS = [
-  {{ key: 'grey',      label: 'grey' }},
-  {{ key: 'hsv',       label: 'hsv' }},
-  {{ key: 'cropped',   label: 'crop' }},
-  {{ key: 'luminance', label: 'lum' }},
-  {{ key: 'dark',      label: 'dark' }},
-];
-let sortMode = 'grey';
-
-function setSort(mode) {{
-  sortMode = mode;
-  METRICS.forEach(m => {{
-    document.getElementById('btn-' + m.key).classList.toggle('active', m.key === mode);
-  }});
-  render();
-}}
-
-function updateThreshold() {{
-  const val = document.getElementById('thresh-slider').value;
-  document.getElementById('thresh-val').textContent = val;
-  render();
-}}
-
-function render() {{
-  const thresh = +document.getElementById('thresh-slider').value;
-  const sorted = [...data].sort((a, b) => a[sortMode] - b[sortMode]);
-  document.getElementById('grid').innerHTML = sorted.map(r => {{
-    const isNight = r[sortMode] <= thresh;
-    const scoreRows = METRICS.map(m => {{
-      const active = m.key === sortMode ? 'active' : '';
-      return `<div class="score-row ${{active}}"><span class="label">${{m.label}}</span><span>${{r[m.key].toFixed(1)}}</span></div>`;
-    }}).join('');
-    return `
-      <div class="card ${{isNight ? '' : 'dimmed'}}">
-        <img src="evening/${{r.name}}" loading="lazy">
-        <div class="scores">${{scoreRows}}</div>
-      </div>`;
-  }}).join('');
-}}
-
-render();
-</script>
-</body>
-</html>"""
-
-with open("evening_viewer.html", "w") as f:
-    f.write(html)
-
-print("Saved evening_viewer.html — open in a browser to pick your threshold")
