@@ -4,5 +4,6 @@
 *.png
 *.csv
 *.jpeg
+*.json
 /daytime
 .claude
