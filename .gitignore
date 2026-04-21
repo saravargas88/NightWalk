@@ -6,4 +6,6 @@
 *.jpeg
 *.json
 /daytime
+.DS_Store
+
 .claude
