@@ -27,3 +27,19 @@ prompts:
       streetlight: '\b(streetlight|street light|street lamp|lamppost)\b'
       storefront: '\b(storefront|shop front|shopfront|lit storefront)\b'
       doorman: '\b(doorman|lobby|building lobby|lit lobby|building entrance)\b'
+
+  - name: informed_prompt_2
+    text: "a street tree . a row of trees . tree canopy . a streetlight . a street lamp . a light pole . a shop front . a storefront . a commercial facade ."
+    patterns:
+      tree: '\b(street tree|row of trees|tree canopy|canopy)\b'
+      # tree: '\b(tree|row of trees|tree canopy|canopy)\b'
+      streetlight: '\b(streetlight|street light|street lamp|lamp post|light pole|utility pole)\b'
+      storefront: '\b(storefront|shop front|shopfront|commercial facade|retail)\b'
+
+# This prompt was made because i thought simple would be best--it is so far the best performing one.
+  - name: informed_prompt_3
+    text: "tree . tree top . tree trunk . streetlight . street lamp . light pole . shop front . storefront ."
+    patterns:
+      tree: '\b(tree|tree top|treetop|tree trunk|trunk)\b'
+      streetlight: '\b(streetlight|street light|street lamp|lamp post|light pole|utility pole)\b'
+      storefront: '\b(storefront|shop front|shopfront)\b'

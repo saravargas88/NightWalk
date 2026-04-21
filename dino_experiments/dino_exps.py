@@ -43,8 +43,8 @@ THRESHOLDS = [
 ]
 
 # Count mode settings
-COUNT_PROMPT_NAME = "informed_prompt_1"  # must match a name in prompts.yaml
-SAMPLES           = 20
+COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
+SAMPLES           = 1500
 THRESHOLD         = 0.30
 TEXT_THRESHOLD    = 0.25
 COUNTS_DIR        = Path("dino_counts")
@@ -81,7 +81,8 @@ df["hour"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert("
 day_df = df[df["hour"] < 19].reset_index(drop=True)
 
 # ── Load model ────────────────────────────────────────────────────────────────
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 processor = AutoProcessor.from_pretrained(MODEL_ID)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(MODEL_ID).to(device)
 print(f"Model loaded: {MODEL_ID} on {device}")
