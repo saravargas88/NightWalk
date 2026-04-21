@@ -3,6 +3,8 @@
 *.jpg
 *.png
 *.csv
+*.jpeg
+/daytime
 .DS_Store
 
 .claude

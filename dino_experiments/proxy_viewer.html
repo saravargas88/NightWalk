@@ -7,60 +7,98 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; font-size: 14px; background: #111; color: #eee; padding: 2rem; }
   h1 { font-size: 18px; font-weight: 500; margin-bottom: 1.5rem; }
+
   #drop { border: 1.5px dashed #444; border-radius: 12px; padding: 2rem; text-align: center; color: #888; cursor: pointer; transition: background 0.15s; background: #1e1e1e; margin-bottom: 1.5rem; }
   #drop:hover { background: #2a2a2a; }
-  #drop input { display: none; }
+
   #main { display: none; }
   .run-toggle { display: flex; background: #2a2a2a; border-radius: 6px; overflow: hidden; border: 1px solid #444; flex-wrap: wrap; margin-bottom: 1.25rem; }
   .run-toggle button { background: none; border: none; color: #aaa; padding: 7px 14px; cursor: pointer; font-size: 12px; white-space: nowrap; }
   .run-toggle button.active { background: #555; color: #fff; }
+
   .summary { display: flex; gap: 10px; margin-bottom: 1.25rem; flex-wrap: wrap; }
   .stat { background: #1e1e1e; border-radius: 8px; padding: 0.75rem 1rem; min-width: 100px; }
   .stat .lbl { font-size: 11px; color: #888; margin-bottom: 4px; }
   .stat .val { font-size: 20px; font-weight: 500; }
+
   .toolbar { display: flex; gap: 10px; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; }
   .toolbar select { padding: 6px 10px; border: 1px solid #444; border-radius: 6px; font-size: 13px; background: #2a2a2a; color: #eee; }
-  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+
+  .file-status { font-size: 12px; color: #888; display: flex; gap: 12px; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .file-status span { background: #1e1e1e; border-radius: 6px; padding: 4px 10px; }
+  .file-status span.loaded { color: #4CAF50; }
+  .file-status span.missing { color: #888; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   .card { background: #1e1e1e; border-radius: 10px; border: 1px solid #333; overflow: hidden; }
   .labels { display: flex; gap: 5px; padding: 7px 8px; flex-wrap: wrap; }
   .badge { display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 500; }
-  .card img { width: 100%; height: 150px; object-fit: cover; display: block; cursor: zoom-in; }
-  #empty { color: #666; text-align: center; padding: 2rem; font-size: 13px; }
-  .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:99; align-items:center; justify-content:center; cursor:zoom-out; }
+
+  .canvas-wrap { position: relative; width: 100%; height: 160px; background: #333; cursor: zoom-in; }
+  .canvas-wrap canvas { width: 100%; height: 100%; display: block; }
+
+  .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.92); z-index:99; align-items:center; justify-content:center; cursor:zoom-out; flex-direction: column; gap: 12px; }
   .lightbox.open { display:flex; }
-  .lightbox img { max-width:90vw; max-height:90vh; object-fit:contain; border-radius:6px; }
+  .lightbox canvas { max-width:90vw; max-height:85vh; object-fit:contain; border-radius:6px; }
+  .lightbox-info { font-size: 12px; color: #aaa; }
+
+  #empty { color: #666; text-align: center; padding: 2rem; font-size: 13px; }
+
+  .box-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #aaa; cursor: pointer; }
+  .box-toggle input { cursor: pointer; }
 </style>
 </head>
 <body>
 
 <h1>DINO proxy viewer</h1>
 
-<div id="drop" onclick="document.getElementById('fi').click()">
-  <input type="file" id="fi" accept=".csv" multiple>
-  <div style="font-size: 15px; font-weight: 500; margin-bottom: 6px;">Drop dino_counts_*.csv files here</div>
-  <div style="font-size: 13px;">or click to browse — load multiple runs at once</div>
+<div id="drop">
+  <input type="file" id="fi" accept=".csv,.json" multiple style="display:none">
+  <div style="font-size: 15px; font-weight: 500; margin-bottom: 6px;">Drop dino_counts_*.csv + dino_counts_*.json files here</div>
+  <div style="font-size: 13px; margin-bottom: 4px;">or click to browse — load CSV and JSON together for box overlay</div>
+  <div style="font-size: 11px; color: #666;">CSV = counts &nbsp;|&nbsp; JSON = bounding boxes (optional)</div>
 </div>
 
 <div id="main">
   <div class="run-toggle" id="run-toggle"></div>
+  <div class="file-status" id="file-status"></div>
   <div class="summary" id="summary"></div>
   <div class="toolbar">
     <select id="sort" onchange="render()">
       <option value="">Sort: default</option>
     </select>
+    <label class="box-toggle">
+      <input type="checkbox" id="show-boxes" checked onchange="render()"> show boxes
+    </label>
+    <label class="box-toggle">
+      <input type="checkbox" id="show-labels" checked onchange="render()"> show labels
+    </label>
   </div>
   <div id="grid"></div>
   <div id="empty" style="display:none">No rows.</div>
 </div>
 
 <div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
-  <img id="lightbox-img" src="">
+  <canvas id="lightbox-canvas"></canvas>
+  <div class="lightbox-info" id="lightbox-info"></div>
 </div>
 
 <script>
+// base for regular dataset
 const IMG_BASE = "../urban-mosaic/washington-square/";
+// base for test set 
+// const IMG_BASE = "/dino_experiments/test-set/"; 
 
-const PALETTE = [
+const CATEGORY_COLORS = {
+  tree:        { stroke: "#4CAF50", fill: "rgba(76,175,80,0.15)",   label: "#4CAF50" },
+  storefront:  { stroke: "#2196F3", fill: "rgba(33,150,243,0.15)",  label: "#2196F3" },
+  lamppost:    { stroke: "#FF9800", fill: "rgba(255,152,0,0.15)",   label: "#FF9800" },
+  streetlight: { stroke: "#FF9800", fill: "rgba(255,152,0,0.15)",   label: "#FF9800" },
+  doorman:     { stroke: "#9C27B0", fill: "rgba(156,39,176,0.15)",  label: "#9C27B0" },
+  other:       { stroke: "#999999", fill: "rgba(153,153,153,0.15)", label: "#999999" },
+};
+
+const BADGE_PALETTE = [
   { bg: "#EAF3DE", color: "#3B6D11" },
   { bg: "#FAEEDA", color: "#854F0B" },
   { bg: "#E6F1FB", color: "#185FA5" },
@@ -71,38 +109,44 @@ const PALETTE = [
 
 const SKIP = new Set(["image", "taken_on", "period", "run"]);
 
-let runs      = {};
-let current   = null;
+let runs     = {};   // name -> [{image, ...counts}]
+let boxData  = {};   // name -> {image_path -> [{box, label, score, category}]}
+let current  = null;
 let colColors = {};
 let colIndex  = 0;
+let imageCache = {};  // url -> HTMLImageElement
 
 function colorFor(col) {
-  if (!colColors[col]) {
-    colColors[col] = PALETTE[colIndex % PALETTE.length];
-    colIndex++;
-  }
+  if (!colColors[col]) { colColors[col] = BADGE_PALETTE[colIndex % BADGE_PALETTE.length]; colIndex++; }
   return colColors[col];
 }
 
 function parseCSV(text) {
-  const lines   = text.trim().split('\n');
+  const lines = text.trim().split('\n');
   const headers = lines[0].split(',').map(h => h.trim());
   return lines.slice(1).map(line => {
     const vals = line.split(',');
-    const obj  = {};
+    const obj = {};
     headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
     return obj;
   });
 }
 
+function runNameFromFile(filename) {
+  return filename.replace(/^dino_counts_/, '').replace(/\.(csv|json)$/, '');
+}
+
 function loadFiles(files) {
   let pending = files.length;
   Array.from(files).forEach(file => {
+    const name = runNameFromFile(file.name);
     const reader = new FileReader();
     reader.onload = ev => {
-      const rows = parseCSV(ev.target.result);
-      const name = file.name.replace('.csv', '');
-      runs[name] = rows;
+      if (file.name.endsWith('.json')) {
+        try { boxData[name] = JSON.parse(ev.target.result); } catch(e) { console.warn('Bad JSON', file.name, e); }
+      } else {
+        runs[name] = parseCSV(ev.target.result);
+      }
       pending--;
       if (pending === 0) init();
     };
@@ -120,14 +164,24 @@ function init() {
     const btn = document.createElement('button');
     btn.textContent = name;
     btn.className = name === current ? 'active' : '';
-    btn.onclick = () => { current = name; setActive(btn); updateSort(); render(); };
+    btn.onclick = () => { current = name; setActive(btn); updateSort(); render(); updateFileStatus(); };
     wrap.appendChild(btn);
   });
 
   document.getElementById('drop').style.display = 'none';
-  document.getElementById('main').style.display  = 'block';
+  document.getElementById('main').style.display = 'block';
   updateSort();
+  updateFileStatus();
   render();
+}
+
+function updateFileStatus() {
+  const hasBoxes = !!boxData[current];
+  document.getElementById('file-status').innerHTML =
+    `<span class="loaded">✓ CSV loaded</span>` +
+    (hasBoxes
+      ? `<span class="loaded">✓ JSON boxes loaded</span>`
+      : `<span class="missing">○ no JSON boxes (load dino_counts_${current}.json to enable overlay)</span>`);
 }
 
 function setActive(el) {
@@ -142,7 +196,7 @@ function dataCols() {
 }
 
 function updateSort() {
-  const sel  = document.getElementById('sort');
+  const sel = document.getElementById('sort');
   const cols = dataCols();
   sel.innerHTML = '<option value="">Sort: default</option>' +
     cols.flatMap(c => [
@@ -151,10 +205,108 @@ function updateSort() {
     ]).join('');
 }
 
-function render() {
+function loadImage(url) {
+  if (imageCache[url]) return Promise.resolve(imageCache[url]);
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { imageCache[url] = img; resolve(img); };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function drawBoxesOnCanvas(canvas, img, boxes, showBoxes, showLabels) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  if (img) {
+    ctx.drawImage(img, 0, 0, W, H);
+  } else {
+    ctx.fillStyle = '#333';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#666';
+    ctx.font = '12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('image not found', W/2, H/2);
+    return;
+  }
+
+  if (!boxes || !showBoxes) return;
+
+  const scaleX = W / (img.naturalWidth || W);
+  const scaleY = H / (img.naturalHeight || H);
+
+  boxes.forEach(b => {
+    const [x0, y0, x1, y1] = b.box;
+    const sx0 = x0 * scaleX, sy0 = y0 * scaleY;
+    const sx1 = x1 * scaleX, sy1 = y1 * scaleY;
+    const cat = b.category || 'other';
+    const c = CATEGORY_COLORS[cat] || CATEGORY_COLORS.other;
+
+    ctx.fillStyle = c.fill;
+    ctx.fillRect(sx0, sy0, sx1-sx0, sy1-sy0);
+    ctx.strokeStyle = c.stroke;
+    ctx.lineWidth = Math.max(1.5, W / 300);
+    ctx.strokeRect(sx0, sy0, sx1-sx0, sy1-sy0);
+
+    if (showLabels) {
+      const text = `${b.label} ${b.score.toFixed(2)}`;
+      const fSize = Math.max(10, W / 35);
+      ctx.font = `${fSize}px system-ui`;
+      const tw = ctx.measureText(text).width;
+      ctx.fillStyle = c.stroke;
+      ctx.fillRect(sx0, sy0 - fSize - 2, tw + 6, fSize + 4);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(text, sx0 + 3, sy0 - 3);
+    }
+  });
+}
+
+async function renderCard(row, cols, boxes, showBoxes, showLabels) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const badges = cols.map(c => {
+    const { bg, color } = colorFor(c);
+    return `<span class="badge" style="background:${bg};color:${color}">${c} ${row[c] || 0}</span>`;
+  }).join('');
+  card.innerHTML = `<div class="labels">${badges}</div><div class="canvas-wrap"><canvas></canvas></div>`;
+
+  const wrap = card.querySelector('.canvas-wrap');
+  const canvas = card.querySelector('canvas');
+  canvas.width = 440;
+  canvas.height = 320;
+
+  const url = IMG_BASE + row.image;
+  const img = await loadImage(url);
+  drawBoxesOnCanvas(canvas, img, boxes, showBoxes, showLabels);
+
+  wrap.onclick = () => openLightbox(img, boxes, row.image, showBoxes, showLabels);
+  return card;
+}
+
+function openLightbox(img, boxes, imageName, showBoxes, showLabels) {
+  const lb = document.getElementById('lightbox');
+  const canvas = document.getElementById('lightbox-canvas');
+  const W = img ? Math.min(img.naturalWidth, window.innerWidth * 0.9) : 800;
+  const H = img ? Math.round(W * img.naturalHeight / img.naturalWidth) : 600;
+  canvas.width = W;
+  canvas.height = H;
+  drawBoxesOnCanvas(canvas, img, boxes, showBoxes, showLabels);
+  document.getElementById('lightbox-info').textContent =
+    imageName + (boxes ? `  ·  ${boxes.length} detection${boxes.length !== 1 ? 's' : ''}` : '');
+  lb.classList.add('open');
+}
+
+async function render() {
   const rows = runs[current] || [];
   const sort = document.getElementById('sort').value;
   const cols = dataCols();
+  const showBoxes = document.getElementById('show-boxes').checked;
+  const showLabels = document.getElementById('show-labels').checked;
+  const currentBoxData = boxData[current] || null;
 
   let filtered = [...rows];
   if (sort) {
@@ -170,32 +322,24 @@ function render() {
       return `<div class="stat"><div class="lbl">${c}</div><div class="val">${total}</div></div>`;
     }).join('');
 
-  const grid  = document.getElementById('grid');
+  const grid = document.getElementById('grid');
   const empty = document.getElementById('empty');
-  if (!filtered.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  grid.innerHTML = '';
+
+  if (!filtered.length) { empty.style.display = 'block'; return; }
   empty.style.display = 'none';
 
-  grid.innerHTML = filtered.map(r => {
-    const badges = cols.map(c => {
-      const { bg, color } = colorFor(c);
-      return `<span class="badge" style="background:${bg};color:${color}">${c} ${r[c] || 0}</span>`;
-    }).join('');
-    return `
-      <div class="card">
-        <div class="labels">${badges}</div>
-        <img src="${IMG_BASE}${r.image}" loading="lazy"
-          onerror="this.style.background='#333';this.style.height='150px'"
-          onclick="document.getElementById('lightbox-img').src=this.src;document.getElementById('lightbox').classList.add('open')">
-      </div>`;
-  }).join('');
+  for (const row of filtered) {
+    const boxes = currentBoxData ? (currentBoxData[row.image] || null) : null;
+    const card = await renderCard(row, cols, boxes, showBoxes, showLabels);
+    grid.appendChild(card);
+  }
 }
 
-document.getElementById('fi').addEventListener('change', e => {
-  if (e.target.files.length) loadFiles(e.target.files);
-});
-
+document.getElementById('drop').onclick = () => document.getElementById('fi').click();
+document.getElementById('fi').addEventListener('change', e => { if (e.target.files.length) loadFiles(e.target.files); });
 const dropEl = document.getElementById('drop');
-dropEl.addEventListener('dragover',  e => { e.preventDefault(); dropEl.style.background = '#2a2a2a'; });
+dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.style.background = '#2a2a2a'; });
 dropEl.addEventListener('dragleave', () => { dropEl.style.background = '#1e1e1e'; });
 dropEl.addEventListener('drop', e => {
   e.preventDefault(); dropEl.style.background = '#1e1e1e';
