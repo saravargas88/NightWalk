@@ -304,12 +304,13 @@
 </header>
 
 <div id="drop-area">
-  <input type="file" id="fi" accept=".csv" multiple style="display:none">
+  <input type="file" id="fi" accept=".csv,.json" multiple style="display:none">
   <div class="drop-title">Drop CSV files here or click to browse</div>
-  <div class="drop-sub">paired_fixed.csv &nbsp;+&nbsp; dino_counts_informed_prompt_3-pairs.csv</div>
+  <div class="drop-sub">paired_fixed.csv &nbsp;+&nbsp; dino_counts_*-pairs.csv &nbsp;+&nbsp; dino_counts_*.json (optional)</div>
   <div class="drop-files">
     <span class="file-pill" id="pill-pairs">paired_fixed.csv</span>
     <span class="file-pill" id="pill-counts">dino_counts_*.csv</span>
+    <span class="file-pill" id="pill-json">dino_counts_*.json</span>
   </div>
 </div>
 
@@ -339,8 +340,17 @@
 <script>
 const IMG_BASE = "../urban-mosaic/washington-square/";
 
-let pairsData  = null;   // array of pair rows
-let countsData = null;   // map: image_path -> {tree, streetlight, storefront}
+const BOX_COLORS = {
+  tree:        { stroke: '#4CAF50', fill: 'rgba(76,175,80,0.12)' },
+  storefront:  { stroke: '#2196F3', fill: 'rgba(33,150,243,0.12)' },
+  streetlight: { stroke: '#FF9800', fill: 'rgba(255,152,0,0.12)' },
+  lamppost:    { stroke: '#FF9800', fill: 'rgba(255,152,0,0.12)' },
+  other:       { stroke: '#999999', fill: 'rgba(153,153,153,0.12)' },
+};
+
+let pairsData  = null;
+let countsData = null;
+let boxData    = null;
 let merged     = [];
 
 function parseCSV(text) {
@@ -379,6 +389,37 @@ function d3mean(arr, key) {
   return vals.length ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(1) : '—';
 }
 
+function drawImage(canvas, imgPath, boxes) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+    if (!boxes || !boxes.length) return;
+    const sx = W / img.naturalWidth;
+    const sy = H / img.naturalHeight;
+    boxes.forEach(b => {
+      const [x0, y0, x1, y1] = b.box;
+      const c = BOX_COLORS[b.category] || BOX_COLORS.other;
+      ctx.fillStyle = c.fill;
+      ctx.fillRect(x0*sx, y0*sy, (x1-x0)*sx, (y1-y0)*sy);
+      ctx.strokeStyle = c.stroke;
+      ctx.lineWidth = Math.max(1.5, W / 300);
+      ctx.strokeRect(x0*sx, y0*sy, (x1-x0)*sx, (y1-y0)*sy);
+    });
+  };
+  img.onerror = () => {
+    ctx.fillStyle = '#1a1a1f';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#555';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('image not found', W/2, H/2);
+  };
+  img.src = IMG_BASE + imgPath;
+}
+
 function render() {
   const sort = document.getElementById('sort-sel').value;
   let rows = [...merged];
@@ -405,9 +446,7 @@ function render() {
     const dayG   = parseFloat(row.day_grey);
 
     card.innerHTML = `
-      <img class="card-img" src="${IMG_BASE}${row.day_image}"
-           onerror="this.outerHTML='<div class=\\'card-img placeholder\\'>image not found</div>'"
-           loading="lazy">
+      <canvas class="card-img" width="440" height="330"></canvas>
       <div class="card-meta">
         <div class="brightness-row">
           <span class="bright-chip day">☀ ${isNaN(dayG) ? '—' : dayG.toFixed(1)}</span>
@@ -420,6 +459,9 @@ function render() {
         </div>
       </div>
     `;
+
+    const canvas = card.querySelector('canvas');
+    drawImage(canvas, row.day_image, boxData ? (boxData[row.day_image] || null) : null);
 
     card.onclick = () => openLb(row);
     grid.appendChild(card);
@@ -437,8 +479,7 @@ function openLb(row) {
 
   document.getElementById('lb-day').innerHTML = `
     <div class="lb-label day">☀ Daytime</div>
-    <img class="lb-img" src="${IMG_BASE}${row.day_image}"
-         onerror="this.src=''; this.alt='not found'">
+    <canvas id="lb-day-canvas" class="lb-img" width="800" height="600"></canvas>
     <div class="lb-brightness day">${isNaN(dayG) ? '—' : dayG.toFixed(1)}<span>day_grey</span></div>
     <div class="lb-counts">
       ${lbChip('Trees', row.tree)}
@@ -453,6 +494,8 @@ function openLb(row) {
          onerror="this.src=''; this.alt='not found'">
     <div class="lb-brightness night">${isNaN(nightG) ? '—' : nightG.toFixed(1)}<span>night_grey</span></div>
   `;
+
+  drawImage(document.getElementById('lb-day-canvas'), row.day_image, boxData ? (boxData[row.day_image] || null) : null);
 
   document.getElementById('lightbox').classList.add('open');
 }
@@ -469,18 +512,25 @@ document.getElementById('lightbox').addEventListener('click', e => {
   if (e.target === document.getElementById('lightbox')) closeLb();
 });
 
-// File loading
 function loadFiles(files) {
   Array.from(files).forEach(file => {
     const reader = new FileReader();
     reader.onload = ev => {
+      if (file.name.endsWith('.json')) {
+        try {
+          boxData = JSON.parse(ev.target.result);
+          document.getElementById('pill-json').classList.add('loaded');
+          document.getElementById('pill-json').textContent = '✓ ' + file.name;
+          if (merged.length) render();
+        } catch(e) { console.warn('Bad JSON', e); }
+        return;
+      }
       const rows = parseCSV(ev.target.result);
       if (file.name.includes('paired')) {
         pairsData = rows;
         document.getElementById('pill-pairs').classList.add('loaded');
         document.getElementById('pill-pairs').textContent = '✓ ' + file.name;
       } else {
-        // counts CSV — index by image
         countsData = {};
         rows.forEach(r => { countsData[r.image] = { tree: r.tree, streetlight: r.streetlight, storefront: r.storefront }; });
         document.getElementById('pill-counts').classList.add('loaded');
