@@ -44,7 +44,7 @@ THRESHOLDS = [
 
 # Count mode settings
 COUNT_PROMPT_NAME = "informed_prompt_3"  # must match a name in prompts.yaml
-SAMPLES           = 1500
+SAMPLES           = 109
 THRESHOLD         = 0.30
 TEXT_THRESHOLD    = 0.25
 COUNTS_DIR        = Path("dino_counts")
@@ -76,9 +76,16 @@ PROMPTS = [
 PROMPT_MAP = {p["name"]: p for p in PROMPTS}
 
 # ── Load dataset ──────────────────────────────────────────────────────────────
-df = pd.read_csv(CSV_PATH)
-df["hour"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert("America/New_York").dt.hour
-day_df = df[df["hour"] < 19].reset_index(drop=True)
+# Loading dataset from big one
+# df = pd.read_csv(CSV_PATH)
+# df["hour"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.tz_convert("America/New_York").dt.hour
+# day_df = df[df["hour"] < 19].reset_index(drop=True)
+
+# Loading data from the pairs file
+pairs = pd.read_csv("../paired_fixed.csv")
+day_df = pairs[["day_image"]].rename(columns={"day_image": "image"})
+day_df["taken_on"] = ""
+day_df["period"] = ""
 
 # ── Load model ────────────────────────────────────────────────────────────────
 # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -202,8 +209,8 @@ elif MODE == "count":
 
     prompt      = PROMPT_MAP[COUNT_PROMPT_NAME]
     RUN_NAME    = COUNT_PROMPT_NAME
-    OUTPUT_CSV  = COUNTS_DIR / f"dino_counts_{RUN_NAME}.csv"
-    OUTPUT_JSON = COUNTS_DIR / f"dino_counts_{RUN_NAME}.json"
+    OUTPUT_CSV  = COUNTS_DIR / f"dino_counts_{RUN_NAME}-pairs.csv"
+    OUTPUT_JSON = COUNTS_DIR / f"dino_counts_{RUN_NAME}-pairs.json"
 
     print(f"Prompt:     {COUNT_PROMPT_NAME}")
     print(f"Text:       {prompt['text']}")

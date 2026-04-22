@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Day / Night Pair Viewer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0d0d0f;
+    --surface:  #16161a;
+    --border:   #2a2a30;
+    --muted:    #555560;
+    --text:     #e2e2e8;
+    --dim:      #888894;
+    --day:      #f5c842;
+    --night:    #7b9cff;
+    --green:    #5ecf7a;
+    --mono:     'IBM Plex Mono', monospace;
+    --sans:     'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1rem;
+  }
+
+  header h1 {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  header .subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* Drop zone */
+  #drop-area {
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 3rem 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    margin-bottom: 2rem;
+  }
+  #drop-area:hover { border-color: var(--muted); background: #1a1a1f; }
+  #drop-area.drag  { border-color: var(--day); background: #1a1a14; }
+
+  #drop-area .drop-title {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--dim);
+    margin-bottom: 0.5rem;
+  }
+  #drop-area .drop-sub {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  #drop-area .drop-files {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+  .file-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .file-pill.loaded { border-color: var(--green); color: var(--green); }
+
+  /* Stats bar */
+  #stats-bar {
+    display: none;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    flex-wrap: wrap;
+  }
+  #stats-bar span b { color: var(--text); font-weight: 500; }
+
+  /* Sort toolbar */
+  #toolbar {
+    display: none;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  #toolbar label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #toolbar select {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+
+  /* Grid */
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+
+  .card {
+    background: var(--surface);
+    cursor: pointer;
+    transition: background 0.1s;
+    overflow: hidden;
+  }
+  .card:hover { background: #1c1c22; }
+
+  .card-img {
+    width: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    display: block;
+    background: #1a1a1f;
+  }
+  .card-img.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .card-meta {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .brightness-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .bright-chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-weight: 500;
+  }
+  .bright-chip.day   { background: rgba(245,200,66,0.12); color: var(--day); }
+  .bright-chip.night { background: rgba(123,156,255,0.12); color: var(--night); }
+
+  .counts-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .count-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+  }
+  .count-badge.nonzero { border-color: #3a3a44; color: var(--text); }
+
+  /* Lightbox */
+  #lightbox {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 2rem;
+    flex-wrap: wrap;
+  }
+  #lightbox.open { display: flex; }
+
+  .lb-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 45vw;
+  }
+
+  .lb-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .lb-label.day   { color: var(--day); }
+  .lb-label.night { color: var(--night); }
+
+  .lb-img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    border-radius: 2px;
+    display: block;
+    background: #111;
+  }
+
+  .lb-brightness {
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .lb-brightness.day   { color: var(--day); }
+  .lb-brightness.night { color: var(--night); }
+
+  .lb-brightness span {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .lb-counts {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .lb-count-chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--dim);
+  }
+  .lb-count-chip b { color: var(--text); }
+
+  .lb-close {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    background: var(--surface);
+  }
+  .lb-close:hover { color: var(--text); border-color: var(--muted); }
+
+  .lb-divider {
+    width: 1px;
+    background: var(--border);
+    align-self: stretch;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Day / Night Viewer</h1>
+  <span class="subtitle">drop paired_fixed.csv + dino_counts_*.csv</span>
+</header>
+
+<div id="drop-area">
+  <input type="file" id="fi" accept=".csv" multiple style="display:none">
+  <div class="drop-title">Drop CSV files here or click to browse</div>
+  <div class="drop-sub">paired_fixed.csv &nbsp;+&nbsp; dino_counts_informed_prompt_3-pairs.csv</div>
+  <div class="drop-files">
+    <span class="file-pill" id="pill-pairs">paired_fixed.csv</span>
+    <span class="file-pill" id="pill-counts">dino_counts_*.csv</span>
+  </div>
+</div>
+
+<div id="stats-bar"></div>
+<div id="toolbar">
+  <label>Sort</label>
+  <select id="sort-sel" onchange="render()">
+    <option value="">default</option>
+    <option value="night_grey_d">night brightness ↓</option>
+    <option value="night_grey_a">night brightness ↑</option>
+    <option value="tree_d">trees ↓</option>
+    <option value="tree_a">trees ↑</option>
+    <option value="streetlight_d">streetlights ↓</option>
+    <option value="storefront_d">storefronts ↓</option>
+  </select>
+</div>
+
+<div id="grid"></div>
+
+<div id="lightbox">
+  <button class="lb-close" onclick="closeLb()">close ×</button>
+  <div class="lb-panel" id="lb-day"></div>
+  <div class="lb-divider"></div>
+  <div class="lb-panel" id="lb-night"></div>
+</div>
+
+<script>
+const IMG_BASE = "../urban-mosaic/washington-square/";
+
+let pairsData  = null;   // array of pair rows
+let countsData = null;   // map: image_path -> {tree, streetlight, storefront}
+let merged     = [];
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',');
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (vals[i] || '').trim());
+    return obj;
+  });
+}
+
+function tryMerge() {
+  if (!pairsData || !countsData) return;
+
+  merged = pairsData.map(row => {
+    const counts = countsData[row.day_image] || { tree: '-', streetlight: '-', storefront: '-' };
+    return { ...row, ...counts };
+  });
+
+  const statsBar = document.getElementById('stats-bar');
+  statsBar.style.display = 'flex';
+  statsBar.innerHTML = `
+    <span><b>${merged.length}</b> pairs</span>
+    <span>night_grey &nbsp;<b>${d3mean(merged, 'night_grey')}</b> mean</span>
+    <span>day_grey &nbsp;<b>${d3mean(merged, 'day_grey')}</b> mean</span>
+  `;
+
+  document.getElementById('toolbar').style.display = 'flex';
+  render();
+}
+
+function d3mean(arr, key) {
+  const vals = arr.map(r => parseFloat(r[key])).filter(v => !isNaN(v));
+  return vals.length ? (vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(1) : '—';
+}
+
+function render() {
+  const sort = document.getElementById('sort-sel').value;
+  let rows = [...merged];
+
+  if (sort) {
+    const [col, dir] = sort.split(/_([ad])$/);
+    rows.sort((a, b) => {
+      const av = parseFloat(a[col]), bv = parseFloat(b[col]);
+      if (isNaN(av) && isNaN(bv)) return 0;
+      if (isNaN(av)) return 1;
+      if (isNaN(bv)) return -1;
+      return dir === 'd' ? bv - av : av - bv;
+    });
+  }
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  rows.forEach(row => {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const nightG = parseFloat(row.night_grey);
+    const dayG   = parseFloat(row.day_grey);
+
+    card.innerHTML = `
+      <img class="card-img" src="${IMG_BASE}${row.day_image}"
+           onerror="this.outerHTML='<div class=\\'card-img placeholder\\'>image not found</div>'"
+           loading="lazy">
+      <div class="card-meta">
+        <div class="brightness-row">
+          <span class="bright-chip day">☀ ${isNaN(dayG) ? '—' : dayG.toFixed(1)}</span>
+          <span class="bright-chip night">☾ ${isNaN(nightG) ? '—' : nightG.toFixed(1)}</span>
+        </div>
+        <div class="counts-row">
+          ${countBadge('tree', row.tree)}
+          ${countBadge('lamp', row.streetlight)}
+          ${countBadge('shop', row.storefront)}
+        </div>
+      </div>
+    `;
+
+    card.onclick = () => openLb(row);
+    grid.appendChild(card);
+  });
+}
+
+function countBadge(label, val) {
+  const nonzero = val !== '-' && val !== '0' && val !== '' ? 'nonzero' : '';
+  return `<span class="count-badge ${nonzero}">${label} ${val ?? '—'}</span>`;
+}
+
+function openLb(row) {
+  const nightG = parseFloat(row.night_grey);
+  const dayG   = parseFloat(row.day_grey);
+
+  document.getElementById('lb-day').innerHTML = `
+    <div class="lb-label day">☀ Daytime</div>
+    <img class="lb-img" src="${IMG_BASE}${row.day_image}"
+         onerror="this.src=''; this.alt='not found'">
+    <div class="lb-brightness day">${isNaN(dayG) ? '—' : dayG.toFixed(1)}<span>day_grey</span></div>
+    <div class="lb-counts">
+      ${lbChip('Trees', row.tree)}
+      ${lbChip('Streetlights', row.streetlight)}
+      ${lbChip('Storefronts', row.storefront)}
+    </div>
+  `;
+
+  document.getElementById('lb-night').innerHTML = `
+    <div class="lb-label night">☾ Nighttime</div>
+    <img class="lb-img" src="${IMG_BASE}${row.night_image}"
+         onerror="this.src=''; this.alt='not found'">
+    <div class="lb-brightness night">${isNaN(nightG) ? '—' : nightG.toFixed(1)}<span>night_grey</span></div>
+  `;
+
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function lbChip(label, val) {
+  return `<span class="lb-count-chip">${label} <b>${val ?? '—'}</b></span>`;
+}
+
+function closeLb() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+document.getElementById('lightbox').addEventListener('click', e => {
+  if (e.target === document.getElementById('lightbox')) closeLb();
+});
+
+// File loading
+function loadFiles(files) {
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const rows = parseCSV(ev.target.result);
+      if (file.name.includes('paired')) {
+        pairsData = rows;
+        document.getElementById('pill-pairs').classList.add('loaded');
+        document.getElementById('pill-pairs').textContent = '✓ ' + file.name;
+      } else {
+        // counts CSV — index by image
+        countsData = {};
+        rows.forEach(r => { countsData[r.image] = { tree: r.tree, streetlight: r.streetlight, storefront: r.storefront }; });
+        document.getElementById('pill-counts').classList.add('loaded');
+        document.getElementById('pill-counts').textContent = '✓ ' + file.name;
+      }
+      tryMerge();
+    };
+    reader.readAsText(file);
+  });
+}
+
+const dropEl = document.getElementById('drop-area');
+dropEl.onclick = () => document.getElementById('fi').click();
+document.getElementById('fi').addEventListener('change', e => { if (e.target.files.length) loadFiles(e.target.files); });
+dropEl.addEventListener('dragover', e => { e.preventDefault(); dropEl.classList.add('drag'); });
+dropEl.addEventListener('dragleave', () => dropEl.classList.remove('drag'));
+dropEl.addEventListener('drop', e => {
+  e.preventDefault(); dropEl.classList.remove('drag');
+  if (e.dataTransfer.files.length) loadFiles(e.dataTransfer.files);
+});
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLb(); });
+</script>
+</body>
+</html>
