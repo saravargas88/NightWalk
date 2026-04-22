@@ -4,6 +4,7 @@
 *.png
 *.csv
 *.jpeg
+*.json
 /daytime
 .DS_Store
 
