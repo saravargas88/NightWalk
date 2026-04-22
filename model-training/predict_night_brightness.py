@@ -4,7 +4,7 @@ from sklearn.metrics import r2_score, mean_absolute_error
 import matplotlib.pyplot as plt
 
 
-pairs    = pd.read_csv("../paired_fixed.csv")
+pairs    = pd.read_csv("paired_fixed.csv")
 features = pd.read_csv("../dino_experiments/dino_counts/dino_counts_informed_prompt_3-pairs.csv")
 
 merged = features.merge(pairs[["day_image", "night_grey"]], 
