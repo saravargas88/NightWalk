@@ -5,7 +5,9 @@
 *.csv
 *.jpeg
 *.json
+*.xmp
 /daytime
 .DS_Store
-.HEIC
+
 .claude
+image_map.html
