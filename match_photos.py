@@ -58,7 +58,8 @@ def haversine(lat1, lon1, lat2, lon2):
 # ── EXIF extraction ───────────────────────────────────────────────────────────
 
 def get_exif_gps(path):
-    """Extract (lat, lon, timestamp) from iPhone photo EXIF. Returns None if missing."""
+    """Extract (lat, lon, timestamp, heading) from iPhone photo EXIF/XMP.
+    heading is None if not available. Returns None if no GPS found."""
     try:
         img = Image.open(path)
         exif_raw = img._getexif()
@@ -90,7 +91,16 @@ def get_exif_gps(path):
         if gps_info.get("GPSLongitudeRef") == "W":
             lon = -lon
 
-        return lat, lon, timestamp or ""
+        # GPSImgDirection = camera heading in degrees (True north)
+        heading = None
+        raw_dir = gps_info.get("GPSImgDirection")
+        if raw_dir is not None:
+            try:
+                heading = float(raw_dir)
+            except Exception:
+                pass
+
+        return lat, lon, timestamp or "", heading
 
     except Exception as e:
         print(f"  EXIF error for {path}: {e}")
@@ -117,14 +127,14 @@ def get_gps_mdls(path):
         ts  = data.get("kMDItemContentCreationDate", "")
         if lat == "(null)" or lon == "(null)":
             return None
-        return float(lat), float(lon), ts
+        return float(lat), float(lon), ts, None  # mdls doesn't expose heading
     except Exception as e:
         print(f"  mdls error for {path}: {e}")
         return None
 
 
 def extract_gps(path):
-    """Try Pillow first, fall back to mdls."""
+    """Try Pillow first, fall back to mdls. Returns (lat, lon, ts, heading) or None."""
     result = get_exif_gps(path)
     if result:
         return result
@@ -132,13 +142,30 @@ def extract_gps(path):
 
 # ── Candidate finder ──────────────────────────────────────────────────────────
 
-def find_candidates(lat, lon, df, n=4):
-    """Return the n nearest daytime rows by haversine distance."""
+def heading_diff(h1, h2):
+    """Absolute angular difference between two headings, 0-180."""
+    diff = abs(h1 - h2) % 360
+    return diff if diff <= 180 else 360 - diff
+
+def find_candidates(lat, lon, df, n=4, night_heading=None, pre_filter=20):
+    """Return the n best daytime candidates by distance, then re-ranked by heading."""
     df = df.copy()
     df["_dist"] = df.apply(
         lambda r: haversine(lat, lon, r["lat"], r["lon"]), axis=1
     )
-    return df.nsmallest(n, "_dist").reset_index(drop=True)
+    # Stage 1: take closest pre_filter by distance
+    pool = df.nsmallest(pre_filter, "_dist")
+    # Stage 2: if we have a night heading, re-rank by heading diff
+    if night_heading is not None:
+        day_heading_col = "heading" if "heading" in pool.columns else "azimuth"
+        pool = pool.copy()
+        pool["_hdiff"] = pool[day_heading_col].apply(
+            lambda h: heading_diff(night_heading, h)
+        )
+        pool = pool.nsmallest(n, "_hdiff")
+    else:
+        pool = pool.head(n)
+    return pool.reset_index(drop=True)
 
 # ── UI ────────────────────────────────────────────────────────────────────────
 
@@ -350,7 +377,7 @@ class MatcherWindow(QMainWindow):
             self._finish()
             return
 
-        path, lat, lon, ts = self.night_photos[self.current_idx]
+        path, lat, lon, ts, night_heading = self.night_photos[self.current_idx]
         total = len(self.night_photos)
 
         # Progress
@@ -368,14 +395,16 @@ class MatcherWindow(QMainWindow):
         else:
             self.night_img.setText("Cannot load image")
 
+        heading_str = f"{night_heading:.1f}°" if night_heading is not None else "n/a"
         self.night_meta.setText(
             f"<b>{path.name}</b><br>"
             f"GPS: {lat:.6f}, {lon:.6f}<br>"
+            f"Heading: {heading_str}<br>"
             f"Taken: {ts}"
         )
 
         # Find candidates
-        candidates = find_candidates(lat, lon, self.df, self.n_candidates)
+        candidates = find_candidates(lat, lon, self.df, self.n_candidates, night_heading)
 
         # Clear old cards
         for card in self._cards:
@@ -390,6 +419,19 @@ class MatcherWindow(QMainWindow):
             self._cards.append(card)
         self._reflow_cards()
 
+    def _go_back(self):
+        if self.current_idx == 0:
+            return
+        # Remove last saved match/skip
+        if self.matches:
+            removed = self.matches.pop()
+            # If it was a confirmed match, remove from matched set
+            if not removed["skipped"] and removed["day_id"]:
+                self._matched_day_ids.discard(str(removed["day_id"]))
+            self._save()
+        self.current_idx -= 1
+        self._load_current()
+
     def keyPressEvent(self, event):
         key = event.key()
         if key == Qt.Key_Space:
@@ -400,6 +442,8 @@ class MatcherWindow(QMainWindow):
                 self._confirm()
             else:
                 self._skip()
+        elif key == Qt.Key_Left:
+            self._go_back()
         elif key == Qt.Key_X:
             self._skip()
 
@@ -426,7 +470,7 @@ class MatcherWindow(QMainWindow):
     def _confirm(self):
         if self._selected_row is None:
             return
-        path, lat, lon, ts = self.night_photos[self.current_idx]
+        path, lat, lon, ts, night_heading = self.night_photos[self.current_idx]
         row = self._selected_row
         self.matches.append({
             "night_photo":  path.name,
@@ -447,7 +491,7 @@ class MatcherWindow(QMainWindow):
         self._load_current()
 
     def _skip(self):
-        path, lat, lon, ts = self.night_photos[self.current_idx]
+        path, lat, lon, ts, night_heading = self.night_photos[self.current_idx]
         self.matches.append({
             "night_photo":  path.name,
             "night_lat":    lat,
@@ -511,7 +555,7 @@ def main():
     for p in photo_files:
         gps = extract_gps(p)
         if gps:
-            night_photos.append((p, gps[0], gps[1], gps[2]))
+            night_photos.append((p, gps[0], gps[1], gps[2], gps[3]))
         else:
             skipped_no_gps.append(p.name)
 

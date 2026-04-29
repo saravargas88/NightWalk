@@ -82,7 +82,7 @@ PROMPT_MAP = {p["name"]: p for p in PROMPTS}
 # day_df = df[df["hour"] < 19].reset_index(drop=True)
 
 # Loading data from the pairs file
-pairs = pd.read_csv("../paired_fixed.csv")
+pairs = pd.read_csv("../model_training/paired_fixed.csv")
 day_df = pairs[["day_image"]].rename(columns={"day_image": "image"})
 day_df["taken_on"] = ""
 day_df["period"] = ""
