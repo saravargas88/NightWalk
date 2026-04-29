@@ -147,24 +147,31 @@ def heading_diff(h1, h2):
     diff = abs(h1 - h2) % 360
     return diff if diff <= 180 else 360 - diff
 
-def find_candidates(lat, lon, df, n=4, night_heading=None, pre_filter=20):
-    """Return the n best daytime candidates by distance, then re-ranked by heading."""
+def find_candidates(lat, lon, df, n=4, night_heading=None, pre_filter=20,
+                    dist_weight=0.7, heading_weight=0.3):
+    """Return the n best daytime candidates using weighted distance + heading score."""
     df = df.copy()
     df["_dist"] = df.apply(
         lambda r: haversine(lat, lon, r["lat"], r["lon"]), axis=1
     )
     # Stage 1: take closest pre_filter by distance
-    pool = df.nsmallest(pre_filter, "_dist")
-    # Stage 2: if we have a night heading, re-rank by heading diff
+    pool = df.nsmallest(pre_filter, "_dist").copy()
+
     if night_heading is not None:
         day_heading_col = "heading" if "heading" in pool.columns else "azimuth"
-        pool = pool.copy()
         pool["_hdiff"] = pool[day_heading_col].apply(
             lambda h: heading_diff(night_heading, h)
         )
-        pool = pool.nsmallest(n, "_hdiff")
+        # Normalize both to 0-1 then apply weights
+        max_dist = pool["_dist"].max() or 1
+        pool["_score"] = (
+            dist_weight   * (pool["_dist"] / max_dist) +
+            heading_weight * (pool["_hdiff"] / 180.0)
+        )
+        pool = pool.nsmallest(n, "_score")
     else:
         pool = pool.head(n)
+
     return pool.reset_index(drop=True)
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -326,7 +333,12 @@ class MatcherWindow(QMainWindow):
 
         # Buttons
         btn_row = QHBoxLayout()
-        self.skip_btn = QPushButton("Skip →")
+        self.back_btn = QPushButton("← Back")
+        self.back_btn.setFixedHeight(38)
+        self.back_btn.clicked.connect(self._go_back)
+        self.back_btn.setStyleSheet("font-size:13px;")
+
+        self.skip_btn = QPushButton("Skip")
         self.skip_btn.setFixedHeight(38)
         self.skip_btn.clicked.connect(self._skip)
         self.skip_btn.setStyleSheet("font-size:13px;")
@@ -340,6 +352,7 @@ class MatcherWindow(QMainWindow):
             "QPushButton:disabled { background:#222; color:#555; }"
             "QPushButton:enabled:hover { background:#185FA5; }"
         )
+        btn_row.addWidget(self.back_btn)
         btn_row.addWidget(self.skip_btn)
         btn_row.addWidget(self.confirm_btn)
         left.addLayout(btn_row)
@@ -422,10 +435,9 @@ class MatcherWindow(QMainWindow):
     def _go_back(self):
         if self.current_idx == 0:
             return
-        # Remove last saved match/skip
-        if self.matches:
+        # Only pop matches made in this session
+        if len(self.matches) > self._session_start:
             removed = self.matches.pop()
-            # If it was a confirmed match, remove from matched set
             if not removed["skipped"] and removed["day_id"]:
                 self._matched_day_ids.discard(str(removed["day_id"]))
             self._save()
@@ -569,9 +581,13 @@ def main():
 
     # Load daytime CSV
     df = pd.read_csv(csv_path)
-    for col in ["lat", "lon", "heading", "azimuth"]:
+    for col in ["lat", "lon", "snapped_lat", "snapped_lon", "heading", "azimuth"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Use snapped coordinates where available
+    if "snapped_lat" in df.columns and "snapped_lon" in df.columns:
+        df["lat"] = df["snapped_lat"].fillna(df["lat"])
+        df["lon"] = df["snapped_lon"].fillna(df["lon"])
     if "heading" not in df.columns and "azimuth" in df.columns:
         df["heading"] = df["azimuth"]
     df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
