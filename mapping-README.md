@@ -36,10 +36,29 @@ nightwalk/
 Open a terminal, navigate to your `nightwalk/` folder, and run:
 
 ```bash
-python map_matcher.py night-photos/ data/washington-square.csv --output matches_yourname.csv
+python map_matcher.py night-photos-all/ urban-mosaic/washington-square.csv --output matches_yourname.csv
 ```
 
 Replace `yourname` with your actual name (e.g. `matches_alice.csv`). **Everyone uses a different output file** — this is how we avoid overwriting each other's work.
+
+### Modes
+
+The tool has three modes controlled by the `--mode` flag:
+
+| Mode | Command | When to use |
+|------|---------|-------------|
+| Auto (default) | _(no flag)_ | First run, or resuming — the tool figures out where you left off |
+| Continue | `--mode continue` | Pick up from where you stopped; shows only unlabeled photos |
+| Skipped | `--mode skipped` | Go back through photos you previously skipped |
+
+**First time running?** No flag needed — the tool will create your output file automatically and start from the beginning.
+
+**Resuming after a break?** Just run the same command again with no flag. It will skip already-labeled photos and continue from where you left off.
+
+**Want to revisit skipped photos?** Run with `--mode skipped`:
+```bash
+python map_matcher.py night-photos-all/ urban-mosaic/washington-square.csv --output matches_remapped.csv --mode skipped
+```
 
 ---
 

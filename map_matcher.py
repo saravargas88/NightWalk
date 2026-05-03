@@ -463,48 +463,92 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("night_dir", help="Folder of night photos")
     parser.add_argument("csv",       help="Daytime image CSV")
-    parser.add_argument("--image-root",   default=None)
-    parser.add_argument("--output",       default="matches.csv")
-    parser.add_argument("--candidates",   type=int, default=12)
+    parser.add_argument("--image-root",  default=None)
+    parser.add_argument("--output",      default="matches.csv")
+    parser.add_argument("--candidates",  type=int, default=12)
+    parser.add_argument("--mode",        choices=["auto", "continue", "skipped"], default="auto",
+                        help="auto: smart default | continue: unlabeled only | skipped: fix skipped only")
     args = parser.parse_args()
 
-    night_dir = Path(args.night_dir)
-    csv_path  = Path(args.csv).expanduser().absolute()
+    night_dir  = Path(args.night_dir)
+    csv_path   = Path(args.csv).expanduser().absolute()
     image_root = Path(args.image_root).expanduser().absolute() if args.image_root else csv_path.parent / csv_path.stem
     output_path = Path(args.output)
 
+    extensions = {".jpg", ".jpeg", ".JPG", ".JPEG", ".heic", ".HEIC"}
+
+    # ── Bootstrap output CSV if it doesn't exist yet ──────────────────────────
     if not output_path.exists():
-        print(f"Error: {output_path} does not exist. Please run the automatic matcher first.")
-        sys.exit(1)
+        photos = sorted([p for p in night_dir.iterdir() if p.suffix in extensions])
+        if not photos:
+            print(f"Error: No photos found in {night_dir}")
+            sys.exit(1)
+        n = len(photos)
+        bootstrap_df = pd.DataFrame({
+            "night_photo": [p.name for p in photos],
+            "night_lat":   [None] * n,
+            "night_lon":   [None] * n,
+            "day_image":   [None] * n,
+            "day_id":      [None] * n,
+            "day_lat":     [None] * n,
+            "day_lon":     [None] * n,
+            "day_heading": [None] * n,
+            "distance_m":  [None] * n,
+            "skipped":     [None] * n,   # None = unlabeled, True = skipped, False = matched
+        })
+        bootstrap_df.to_csv(output_path, index=False)
+        print(f"Created {output_path} with {n} photos. Starting from scratch.")
 
     existing_df = pd.read_csv(output_path)
 
-    matched_rows = existing_df[existing_df["skipped"] == False].dropna(subset=["day_id"])
-    used_day_ids = set(matched_rows["day_id"].astype(float).astype(int))
+    # Classify rows
+    matched_mask   = (existing_df["skipped"] == False) & existing_df["day_id"].notna()
+    skipped_mask   = existing_df["skipped"] == True
+    unlabeled_mask = existing_df["skipped"].isna()
 
-    skipped_df = existing_df[existing_df["skipped"] == True]
+    used_day_ids = set(existing_df.loc[matched_mask, "day_id"].astype(float).astype(int))
 
-    extensions = {".jpg", ".jpeg", ".JPG", ".JPEG", ".heic", ".HEIC"}
+    # ── Determine which rows to show based on mode ────────────────────────────
+    mode = args.mode
+
+    # "auto": first run = continue (unlabeled); if all labeled = skipped
+    if mode == "auto":
+        if unlabeled_mask.any():
+            mode = "continue"
+        elif skipped_mask.any():
+            mode = "skipped"
+        else:
+            print("All photos are matched! Nothing to do.")
+            sys.exit(0)
+
+    if mode == "continue":
+        work_df = existing_df[unlabeled_mask]
+        mode_label = "unlabeled"
+    elif mode == "skipped":
+        work_df = existing_df[skipped_mask]
+        mode_label = "skipped"
+
     pending_photos = []
-
-    for _, row in skipped_df.iterrows():
+    for _, row in work_df.iterrows():
         fname = row["night_photo"]
         p = night_dir / fname
         if p.exists() and p.suffix in extensions:
             pending_photos.append({
                 "path": p,
-                "lat": row.get("night_lat", None),
-                "lon": row.get("night_lon", None)
+                "lat":  row.get("night_lat", None),
+                "lon":  row.get("night_lon", None),
             })
 
-    print(f"\nFound {len(pending_photos)} skipped photos in {output_path.name} that need manual mapping.")
+    print(f"\nMode: {mode} — found {len(pending_photos)} {mode_label} photos.")
     if not pending_photos:
-        print("All photos are already matched! Exiting.")
+        print(f"No {mode_label} photos to label. Try a different --mode.")
         sys.exit(0)
 
+    # ── Load daytime CSV ──────────────────────────────────────────────────────
     df = pd.read_csv(csv_path)
     for col in ["lat", "lon", "snapped_lat", "snapped_lon", "heading", "azimuth"]:
-        if col in df.columns: df[col] = pd.to_numeric(df[col], errors="coerce")
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     if "snapped_lat" in df.columns: df["lat"] = df["snapped_lat"].fillna(df["lat"])
     if "snapped_lon" in df.columns: df["lon"] = df["snapped_lon"].fillna(df["lon"])
     if "heading" not in df.columns and "azimuth" in df.columns: df["heading"] = df["azimuth"]
@@ -514,10 +558,10 @@ def main():
     app.setStyle("Fusion")
 
     palette = QPalette()
-    palette.setColor(QPalette.Window, QColor(22, 22, 28))
+    palette.setColor(QPalette.Window,     QColor(22, 22, 28))
     palette.setColor(QPalette.WindowText, QColor(220, 220, 220))
-    palette.setColor(QPalette.Base, QColor(15, 15, 20))
-    palette.setColor(QPalette.Text, QColor(220, 220, 220))
+    palette.setColor(QPalette.Base,       QColor(15, 15, 20))
+    palette.setColor(QPalette.Text,       QColor(220, 220, 220))
     app.setPalette(palette)
 
     win = MapMatcherWindow(pending_photos, df, image_root, output_path, args.candidates, used_day_ids)
