@@ -150,12 +150,18 @@ def heading_diff(h1, h2):
 def find_candidates(lat, lon, df, n=4, night_heading=None, pre_filter=20,
                     dist_weight=0.7, heading_weight=0.3):
     """Return the n best daytime candidates using weighted distance + heading score."""
+    
+    # --- ADD THIS LINE: Ensure the pool is at least twice the size of n ---
+    actual_pre_filter = max(pre_filter, n * 2) 
+
     df = df.copy()
     df["_dist"] = df.apply(
         lambda r: haversine(lat, lon, r["lat"], r["lon"]), axis=1
     )
+    
+    # --- UPDATE THIS LINE to use actual_pre_filter ---
     # Stage 1: take closest pre_filter by distance
-    pool = df.nsmallest(pre_filter, "_dist").copy()
+    pool = df.nsmallest(actual_pre_filter, "_dist").copy()
 
     if night_heading is not None:
         day_heading_col = "heading" if "heading" in pool.columns else "azimuth"
@@ -284,6 +290,10 @@ class MatcherWindow(QMainWindow):
                 str(m["day_id"]) for m in self.matches if not m["skipped"] and m["day_id"]
             )
             print(f"Resuming: {len(done)} already matched, {len(self.night_photos)} remaining")
+
+        # --- ADD THIS LINE ---
+        # Keep track of how many matches existed before this session started
+        self._session_start = len(self.matches)
 
         self.setWindowTitle("NightWalk — Photo Matcher")
         self.resize(1400, 760)
@@ -546,7 +556,7 @@ def main():
     parser.add_argument("csv",       help="Daytime image CSV")
     parser.add_argument("--image-root",   default=None)
     parser.add_argument("--output",       default="matches.csv")
-    parser.add_argument("--candidates",   type=int, default=4)
+    parser.add_argument("--candidates",   type=int, default=30)
     args = parser.parse_args()
 
     night_dir = Path(args.night_dir)
