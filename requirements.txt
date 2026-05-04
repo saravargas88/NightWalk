@@ -2,7 +2,9 @@ torch
 torchvision
 transformers
 Pillow
+pillow-heif
 numpy
 matplotlib
 accelerate
 pandas
+scipy
