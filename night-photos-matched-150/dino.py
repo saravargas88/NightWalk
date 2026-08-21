@@ -61,7 +61,7 @@ COLORS = {
 }
 
 # ── Load prompts from YAML ────────────────────────────────────────────────────
-_PROMPTS_YAML = Path(__file__).parent.parent / "dino_experiments" / "prompts.yaml"
+_PROMPTS_YAML = Path(__file__).parent.parent / "dino_feature_detection" / "prompts.yaml"
 with open(_PROMPTS_YAML) as f:
     _config = yaml.safe_load(f)
 
