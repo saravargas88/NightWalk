@@ -27,3 +27,7 @@ demo_app/__pycache__/
 # python bytecode caches anywhere under model-training/
 model-training/**/__pycache__/
 model-training/__pycache__/
+
+# added during cleanup
+dino_training_paths.txt
+**/__pycache__/
