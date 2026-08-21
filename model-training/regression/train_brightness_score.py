@@ -30,8 +30,12 @@ from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 
-ROOT = Path(__file__).resolve().parent.parent
+import argparse
+
+ROOT = Path(__file__).resolve().parent.parent.parent
 DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+TRAIN_CSV = ROOT / "splits" / "train_split.csv"
+TEST_CSV = ROOT / "splits" / "test_split.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
 CHECKPOINT_PATH = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 OUTPUT_DIR = ROOT / "model-training" / "brightness-regression-run"
@@ -120,24 +124,45 @@ val_tf = transforms.Compose([
 ])
 
 
-def load_examples() -> list[Example]:
-    with DATA_CSV.open(newline="") as handle:
-        rows = list(csv.DictReader(handle))
+def load_name_map(image_dir: Path) -> dict:
+    map_path = image_dir / "filename_map.csv"
+    if not map_path.exists():
+        return {}
+    remap = {}
+    with map_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            remap[row["original_day_image"]] = row["resized_filename"]
+    return remap
+
+
+def load_examples(image_dir: Path, split_csv: Path) -> list[Example]:
+    name_map = load_name_map(image_dir)
+
+    split_df_rows = list(csv.DictReader(split_csv.open(newline="")))
+    allowed = {(r["night_photo"], r["day_image"]) for r in split_df_rows}
+
+    brightness = {
+        (r["night_photo"], r["day_image"]): r
+        for r in csv.DictReader(DATA_CSV.open(newline=""))
+    }
 
     examples: list[Example] = []
-    for row in rows:
-        day_path = DAY_IMAGE_ROOT / row[IMAGE_COL]
+    for key in allowed:
+        b = brightness.get(key)
+        if b is None:
+            continue
+        rel = b[IMAGE_COL]
+        flat = name_map.get(rel)
+        day_path = image_dir / flat if flat else image_dir / rel
         if not day_path.exists():
             continue
-        targets = [float(row[target]) for target in TARGETS]
-        examples.append(
-            Example(
-                image_path=str(day_path),
-                targets=targets,
-                night_photo=row["night_photo"],
-                day_image=row[IMAGE_COL],
-            )
-        )
+        targets = [float(b[target]) for target in TARGETS]
+        examples.append(Example(
+            image_path=str(day_path),
+            targets=targets,
+            night_photo=b["night_photo"],
+            day_image=rel,
+        ))
     return examples
 
 
@@ -244,7 +269,7 @@ def save_predictions(
         for ex, pred_row, label_row in zip(examples, preds_np, labels_np):
             row = {
                 "night_photo": ex.night_photo,
-                "day_image": Path(ex.image_path).relative_to(DAY_IMAGE_ROOT).as_posix(),
+                "day_image": ex.day_image,
             }
             for i, target in enumerate(TARGETS):
                 row[f"actual_{target}"] = round(float(label_row[i]), 4)
@@ -253,8 +278,8 @@ def save_predictions(
     print(f"  Saved predictions to {out_path}")
 
 
-def train() -> None:
-    examples = load_examples()
+def train(image_dir: Path, num_epochs: int = NUM_EPOCHS, lr_backbone: float = LR_BACKBONE, lr_head: float = LR_HEAD, output_dir: Path = OUTPUT_DIR) -> None:
+    examples = load_examples(image_dir, TRAIN_CSV)
     train_raw, val_raw = split_examples(examples)
     print(f"Loaded examples: {len(examples)}")
     print(f"Train: {len(train_raw)}  Val: {len(val_raw)}")
@@ -286,13 +311,13 @@ def train() -> None:
 
     optimizer = AdamW(
         [
-            {"params": model.features.parameters(), "lr": LR_BACKBONE},
-            {"params": model.avgpool.parameters(), "lr": LR_BACKBONE},
-            {"params": model.head.parameters(), "lr": LR_HEAD},
+            {"params": model.features.parameters(), "lr": lr_backbone},
+            {"params": model.avgpool.parameters(), "lr": lr_backbone},
+            {"params": model.head.parameters(), "lr": lr_head},
         ],
         weight_decay=WEIGHT_DECAY,
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS)
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs)
     criterion = nn.HuberLoss()
 
     best_score = float("inf")
@@ -312,7 +337,7 @@ def train() -> None:
         )
         writer.writeheader()
 
-        for epoch in range(1, NUM_EPOCHS + 1):
+        for epoch in range(1, num_epochs + 1):
             model.train()
             train_loss = 0.0
             for images, labels in train_dl:
@@ -352,7 +377,7 @@ def train() -> None:
             mae_str = "  ".join(f"{k}={v:.2f}" for k, v in mae.items())
             r2_str = "  ".join(f"{k}={v:.3f}" for k, v in r2.items())
             print(
-                f"Epoch {epoch:03d}/{NUM_EPOCHS}  "
+                f"Epoch {epoch:03d}/{num_epochs}  "
                 f"train={train_loss:.4f}  val={val_loss:.4f}  "
                 f"MAE: {mae_str}  R2: {r2_str}"
             )
@@ -390,5 +415,12 @@ def train() -> None:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image-dir", type=Path, default=DAY_IMAGE_ROOT)
+    parser.add_argument("--epochs", type=int, default=NUM_EPOCHS)
+    parser.add_argument("--lr-backbone", type=float, default=LR_BACKBONE)
+    parser.add_argument("--lr-head", type=float, default=LR_HEAD)
+    args = parser.parse_args()
     print(f"Using device: {DEVICE}")
-    train()
+    train(image_dir=args.image_dir, num_epochs=args.epochs,
+          lr_backbone=args.lr_backbone, lr_head=args.lr_head)

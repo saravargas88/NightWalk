@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """finetune_brightness.py
 
 Fine-tunes EfficientNet-B0 to predict nighttime brightness (regression)
@@ -47,7 +48,7 @@ from torchvision import transforms
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (
@@ -55,7 +56,7 @@ BRIGHTNESS_CSV = (
     / "experiment_outputs"
     / "paired_dataset_with_brightness.csv"
 )
-DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
+DAY_IMAGE_ROOT = ROOT / "brightnessmetricexperiments" / "nightwalk-images-224"
 
 DINO_CHECKPOINT = ROOT / "model-training" / "best_efficientnet_multihead.pt"
 SSL_CHECKPOINT = ROOT / "model-training" / "ssl-pretrain" / "best_ssl_backbone.pt"
@@ -63,7 +64,7 @@ OUTPUT_BASE = ROOT / "model-training" / "finetune-runs"
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
 BATCH_SIZE = 16
-NUM_EPOCHS = 30
+NUM_EPOCHS = 40
 LR_HEAD = 3e-4
 LR_BACKBONE = 3e-5
 WEIGHT_DECAY = 1e-4
@@ -71,6 +72,10 @@ IMG_SIZE = 224
 NUM_WORKERS = 8
 SAVE_PRED_EVERY = 5
 RANDOM_SEED = 42
+
+# Backbone-specific overrides applied in train_fold when backbone == "dino_counts"
+DINO_LR_BACKBONE = 1e-5   # lower LR — backbone already has useful representations
+DINO_WARMUP_EPOCHS = 10   # freeze backbone, train head-only first
 
 AVAILABLE_METRICS = [
     "gray_mean",
@@ -132,6 +137,18 @@ val_tf = transforms.Compose([
 ])
 
 
+def _load_filename_map(image_dir: Path) -> dict[str, str]:
+    """Load original_day_image -> resized_filename map if present."""
+    map_path = image_dir / "filename_map.csv"
+    if not map_path.exists():
+        return {}
+    remap: dict[str, str] = {}
+    with map_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            remap[row["original_day_image"]] = row["resized_filename"]
+    return remap
+
+
 def _load_examples_from_split(split_csv: Path, metric: str) -> list[Example]:
     """Join a split CSV with the brightness CSV and return valid Examples."""
     split_df = pd.read_csv(split_csv)
@@ -147,15 +164,19 @@ def _load_examples_from_split(split_csv: Path, metric: str) -> list[Example]:
         how="inner",
     )
 
+    name_map = _load_filename_map(DAY_IMAGE_ROOT)
+
     examples = []
     for _, row in merged.iterrows():
-        day_path = DAY_IMAGE_ROOT / row["day_image"]
+        original = row["day_image"]
+        flat = name_map.get(original, original)
+        day_path = DAY_IMAGE_ROOT / flat
         if not day_path.exists():
             continue
         examples.append(
             Example(
                 image_path=str(day_path),
-                day_image=row["day_image"],
+                day_image=original,
                 night_photo=row["night_photo"],
                 target=float(row[metric]),
             )
@@ -378,16 +399,21 @@ def train_fold(
     model = EfficientNetRegressor().to(DEVICE)
     load_backbone(model, backbone)
 
+    # dino_counts backbone: use lower LR + warmup freeze to prevent overfitting
+    effective_lr_backbone = DINO_LR_BACKBONE if backbone == "dino_counts" else LR_BACKBONE
+    warmup_epochs = DINO_WARMUP_EPOCHS if backbone == "dino_counts" else 0
+
     criterion = nn.HuberLoss()
     optimizer = AdamW(
         [
-            {"params": model.features.parameters(), "lr": LR_BACKBONE},
-            {"params": model.avgpool.parameters(), "lr": LR_BACKBONE},
+            {"params": model.features.parameters(), "lr": effective_lr_backbone},
+            {"params": model.avgpool.parameters(), "lr": effective_lr_backbone},
             {"params": model.head.parameters(), "lr": LR_HEAD},
         ],
         weight_decay=WEIGHT_DECAY,
     )
-    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS)
+    # Cosine anneal only over the epochs where the backbone is actually training
+    scheduler = CosineAnnealingLR(optimizer, T_max=max(NUM_EPOCHS - warmup_epochs, 1))
 
     best_val_loss = float("inf")
     best_val_metrics: dict[str, float] = {}
@@ -402,6 +428,16 @@ def train_fold(
         writer.writeheader()
 
         for epoch in range(1, NUM_EPOCHS + 1):
+            # Warmup: backbone frozen for first N epochs, then thawed
+            if epoch == 1 and warmup_epochs > 0:
+                for p in model.features.parameters():
+                    p.requires_grad_(False)
+                print(f"  Backbone frozen for warmup ({warmup_epochs} epochs)")
+            elif epoch == warmup_epochs + 1 and warmup_epochs > 0:
+                for p in model.features.parameters():
+                    p.requires_grad_(True)
+                print(f"  Backbone unfrozen at epoch {epoch}")
+
             model.train()
             train_loss = 0.0
             for images, targets in train_dl:
@@ -424,7 +460,8 @@ def train_fold(
                     all_preds.append(preds.cpu())
                     all_targets.append(targets.cpu())
 
-            scheduler.step()
+            if epoch > warmup_epochs:
+                scheduler.step()
             train_loss /= max(len(train_dl), 1)
             val_loss /= max(len(val_dl), 1)
 
@@ -476,9 +513,12 @@ def train(
     metric: str,
     n_folds: int,
     seed: int,
+    run_tag: str = "",
 ) -> tuple[dict, dict, dict, dict]:
     print(f"\n{'='*60}")
     print(f"Backbone: {backbone}  |  n_train: {n_train}  |  metric: {metric}  |  folds: {n_folds}")
+    if run_tag:
+        print(f"Run tag: {run_tag}")
     print(f"{'='*60}")
 
     train_examples = load_train_examples(metric)
@@ -488,7 +528,8 @@ def train(
     print(f"Using {len(sampled)} training examples for this run")
 
     folds = make_kfold_splits(sampled, n_folds, seed)
-    run_dir = OUTPUT_BASE / backbone / f"n{n_train}"
+    folder_name = f"n{n_train}" + (f"_{run_tag}" if run_tag else "")
+    run_dir = OUTPUT_BASE / backbone / folder_name
 
     fold_val_metrics = []
     fold_test_metrics = []
@@ -557,16 +598,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--metric", default=DEFAULT_METRIC, choices=AVAILABLE_METRICS)
     parser.add_argument("--folds", type=int, default=DEFAULT_FOLDS)
     parser.add_argument("--seed", type=int, default=RANDOM_SEED)
+    parser.add_argument("--epochs", type=int, default=NUM_EPOCHS)
+    parser.add_argument("--lr-backbone", type=float, default=None,
+                        help="Override backbone LR (defaults: dino_counts=1e-5, others=3e-5)")
+    parser.add_argument("--warmup-epochs", type=int, default=None,
+                        help="Override warmup freeze epochs (default: dino_counts=10, others=0)")
+    parser.add_argument("--run-tag", type=str, default="",
+                        help="Suffix appended to the output folder (e.g. 'warmup10_lr1e5'). "
+                             "Lets you keep multiple runs side by side for comparison.")
+    parser.add_argument("--dino-checkpoint", type=Path, default=None,
+                        help="Override path to the dino_counts pretrained checkpoint "
+                             "(default: model-training/best_efficientnet_multihead.pt)")
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     print(f"Using device: {DEVICE}")
     args = parse_args()
+
+    # Apply CLI overrides to module-level constants so train_fold picks them up
+    NUM_EPOCHS = args.epochs
+    if args.lr_backbone is not None:
+        DINO_LR_BACKBONE = args.lr_backbone
+    if args.warmup_epochs is not None:
+        DINO_WARMUP_EPOCHS = args.warmup_epochs
+    if args.dino_checkpoint is not None:
+        DINO_CHECKPOINT = args.dino_checkpoint
+
     train(
         backbone=args.backbone,
         n_train=args.n_train,
         metric=args.metric,
         n_folds=args.folds,
         seed=args.seed,
+        run_tag=args.run_tag,
     )
