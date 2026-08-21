@@ -35,7 +35,7 @@ from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+DATA_CSV = ROOT / "labeling/brightness_metrics" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"

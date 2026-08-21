@@ -26,9 +26,9 @@ to test.
 ## Current Brightness Targets
 
 These targets are computed in
-[`run_brightness_metric_experiments.py`](/Users/sara/Desktop/SPRING2026/CV/NightWalk/brightnessmetricexperiments/run_brightness_metric_experiments.py)
+[`run_brightness_metric_experiments.py`](/Users/sara/Desktop/SPRING2026/CV/NightWalk/labeling/brightness_metrics/run_brightness_metric_experiments.py)
 and stored in
-[`paired_dataset_with_brightness.csv`](/Users/sara/Desktop/SPRING2026/CV/NightWalk/brightnessmetricexperiments/experiment_outputs/paired_dataset_with_brightness.csv).
+[`paired_dataset_with_brightness.csv`](/Users/sara/Desktop/SPRING2026/CV/NightWalk/labeling/brightness_metrics/experiment_outputs/paired_dataset_with_brightness.csv).
 
 ### Raw brightness-style targets
 

@@ -1,7 +1,7 @@
 """Train EfficientNet-B0 brightness regressor from the existing count checkpoint.
 
 This script:
-1. Reads matched day images plus brightness targets from brightnessmetricexperiments outputs
+1. Reads matched day images plus brightness targets from labeling/brightness_metrics outputs
 2. Initializes an EfficientNet-B0 backbone
 3. Loads compatible weights from model-training/best_efficientnet_small.pt
 4. Replaces the old count head with a brightness regression head
@@ -33,7 +33,7 @@ from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 import argparse
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_CSV = ROOT / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+DATA_CSV = ROOT / "labeling/brightness_metrics" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"

@@ -70,7 +70,7 @@ Day-night pairs live in:
 ```
 splits/train_split.csv    ~780 pairs
 splits/test_split.csv     ~200 pairs
-brightnessmetricexperiments/experiment_outputs/paired_dataset_with_brightness.csv
+labeling/brightness_metrics/experiment_outputs/paired_dataset_with_brightness.csv
     → gray_mean, luma_mean, value_mean, gray_mean_zscore + bbox/DINO features per pair
 ```
 

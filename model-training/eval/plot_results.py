@@ -265,7 +265,7 @@ def fig_training_curves() -> None:
 def fig_scatter() -> None:
     # Load ridge predictions
     ridge_trues, ridge_preds = [], []
-    ridge_path = _MODEL_TRAINING.parent / "brightnessmetricexperiments" / "experiment_outputs" / "ridge_zscore_predictions.csv"
+    ridge_path = _MODEL_TRAINING.parent / "labeling/brightness_metrics" / "experiment_outputs" / "ridge_zscore_predictions.csv"
     if ridge_path.exists():
         with ridge_path.open() as f:
             for row in csv.DictReader(f):
@@ -322,7 +322,7 @@ def fig_ridge_analysis() -> None:
     from sklearn.preprocessing import StandardScaler
     from sklearn.model_selection import KFold
 
-    data_path = _MODEL_TRAINING.parent / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
+    data_path = _MODEL_TRAINING.parent / "labeling/brightness_metrics" / "experiment_outputs" / "paired_dataset_with_brightness.csv"
     if not data_path.exists():
         print("  Skipping ridge analysis — paired_dataset_with_brightness.csv not found.")
         return

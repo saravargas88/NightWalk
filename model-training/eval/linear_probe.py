@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (
-    ROOT / "brightnessmetricexperiments"
+    ROOT / "labeling/brightness_metrics"
     / "experiment_outputs"
     / "paired_dataset_with_brightness.csv"
 )

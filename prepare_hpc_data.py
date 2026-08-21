@@ -17,7 +17,7 @@ Output layout:
     splits/
       train_split.csv    ← updated with new flat image paths
       test_split.csv     ← updated with new flat image paths
-    brightnessmetricexperiments/experiment_outputs/paired_dataset_with_brightness.csv
+    labeling/brightness_metrics/experiment_outputs/paired_dataset_with_brightness.csv
     model-training/      ← all .py training scripts + existing .pt checkpoints
 
 Usage:
@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV  = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (
-    ROOT / "brightnessmetricexperiments"
+    ROOT / "labeling/brightness_metrics"
     / "experiment_outputs"
     / "paired_dataset_with_brightness.csv"
 )
@@ -209,7 +209,7 @@ def run(out_dir: Path, ssl_sample: int, dry_run: bool) -> None:
     rewrite_split_csv(TEST_CSV,  out_dir / "splits" / "test_split.csv",  remap)
     rewrite_brightness_csv(
         BRIGHTNESS_CSV,
-        out_dir / "brightnessmetricexperiments" / "experiment_outputs" / "paired_dataset_with_brightness.csv",
+        out_dir / "labeling/brightness_metrics" / "experiment_outputs" / "paired_dataset_with_brightness.csv",
         remap,
     )
     print("  Done.")
