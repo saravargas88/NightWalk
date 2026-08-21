@@ -14,8 +14,9 @@ import json
 import random
 from pathlib import Path
 
-SPLIT_CSV          = Path("splits/efficientnet_train_images.csv")
-IMAGE_ROOT         = "urban-mosaic/washington-square"
+ROOT               = Path(__file__).resolve().parent.parent
+SPLIT_CSV          = ROOT / "splits" / "efficientnet_train_images.csv"
+IMAGE_ROOT         = str(ROOT / "urban-mosaic" / "washington-square")
 OUT_HTML           = Path("split_map.html")
 MAX_PREVIEW_IMAGES = 6
 LAT_BIN_SIZE       = 0.0005

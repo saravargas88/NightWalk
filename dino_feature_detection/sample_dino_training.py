@@ -12,11 +12,12 @@ import random
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DAY_CSV        = "urban-mosaic/washington-square.csv"
-MATCH_CSVS     = ["all-matches.csv", "matches_sara.csv"]
-IMAGE_ROOT     = Path("urban-mosaic/washington-square")
-OUTPUT_CSV     = "dino_training_sample.csv"
-OUTPUT_PATHS   = "dino_training_paths.txt"
+ROOT           = Path(__file__).resolve().parent.parent
+DAY_CSV        = ROOT / "urban-mosaic" / "washington-square.csv"
+MATCH_CSVS     = [ROOT / "all-matches.csv", ROOT / "matches_sara.csv"]
+IMAGE_ROOT     = ROOT / "urban-mosaic" / "washington-square"
+OUTPUT_CSV     = Path(__file__).resolve().parent / "dino_training_sample.csv"
+OUTPUT_PATHS   = Path(__file__).resolve().parent / "dino_training_paths.txt"
 N_SAMPLES      = 100_000
 RANDOM_SEED    = 42
 

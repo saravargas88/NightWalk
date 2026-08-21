@@ -14,10 +14,12 @@ from collections import defaultdict
 from pathlib import Path
 from PIL import Image
 
-DAY_CSV      = "urban-mosaic/washington-square.csv"
-MATCH_CSV    = "all-matches.csv"
-IMAGE_ROOT   = Path("urban-mosaic/washington-square")
-OUT_DIR      = Path("eff-training-upload")
+ROOT         = Path(__file__).resolve().parent.parent
+DAY_CSV      = ROOT / "urban-mosaic" / "washington-square.csv"
+MATCH_CSV    = ROOT / "all-matches.csv"
+IMAGE_ROOT   = ROOT / "urban-mosaic" / "washington-square"
+OUT_DIR      = Path(__file__).resolve().parent / "eff-training-upload"
+
 N_SAMPLES    = 5_000
 MAX_PER_CELL = 20      # max images per ~11m cell
 GRID_SIZE    = 4       # decimal places → ~11m precision

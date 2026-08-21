@@ -13,3 +13,4 @@
 
 - **`legacy_brightness_exploration/`** — an earlier, exploratory pass at brightness scoring, kept for reference (not used by anything downstream).
   - `ground_truth.py`, `darkest_viewer.html`, `evening_viewer.html`
+- must use server to use htmls. 

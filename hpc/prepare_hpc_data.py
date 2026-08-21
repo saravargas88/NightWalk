@@ -41,7 +41,7 @@ import shutil
 from pathlib import Path
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV  = ROOT / "splits" / "test_split.csv"
 BRIGHTNESS_CSV = (

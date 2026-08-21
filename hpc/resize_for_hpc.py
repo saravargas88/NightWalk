@@ -20,7 +20,7 @@ from pathlib import Path
 
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 TRAIN_CSV = ROOT / "splits" / "train_split.csv"
 TEST_CSV  = ROOT / "splits" / "test_split.csv"
 DAY_IMAGE_ROOT = ROOT / "urban-mosaic" / "washington-square"
